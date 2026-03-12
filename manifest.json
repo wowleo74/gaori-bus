@@ -1,7 +1,7 @@
 {
   "name": "가오리 버스",
   "short_name": "가오리버스",
-  "start_url": "/gaori-bus",
+  "start_url": "/gaori-bus/",
   "display": "standalone",
   "background_color": "#F4F6FB",
   "theme_color": "#4F6FD6",
@@ -14,3 +14,4 @@
   ]
 
 }
+
