@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>가오리 버스</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="manifest" href="manifest.json">
+
+<style>
+
+body{
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial;
+background:#F4F6FB;
+margin:0;
+padding:20px;
+}
+
+.container{
+max-width:420px;
+margin:auto;
+}
+
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:20px;
+}
+
+.title{
+font-size:26px;
+font-weight:bold;
+}
+
+.timer{
+background:#4F6FD6;
+color:white;
+padding:6px 14px;
+border-radius:20px;
+font-size:15px;
+}
+
+.buttons{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px;
+margin-bottom:22px;
+}
+
+button{
+background:#4F6FD6;
+border:none;
+color:white;
+font-size:18px;
+padding:14px;
+border-radius:12px;
+}
+
+.cards{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:14px;
+}
+
+.card{
+background:white;
+border-radius:18px;
+padding:18px;
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+.bus{
+background:#FF8A3D;
+color:white;
+padding:8px;
+border-radius:8px;
+font-size:20px;
+text-align:center;
+margin-bottom:14px;
+}
+
+.line{
+margin:12px 0;
+}
+
+.time{
+font-size:20px;
+font-weight:bold;
+}
+
+.stop{
+font-size:15px;
+color:#4F6FD6;
+}
+
+.arrive{
+color:#E53935;
+font-weight:bold;
+font-size:18px;
+}
+
+.status{
+text-align:center;
+margin-top:18px;
+font-size:14px;
+color:#666;
+}
+
+.ray-area{
+text-align:center;
+margin-top:20px;
+}
+
+.ray-area img{
+width:210px;
+opacity:0.35;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="header">
+<div class="title">🚌 가오리 버스</div>
+<div class="timer"><span id="timer">30</span>초</div>
+</div>
+
+<div class="buttons">
+<button onclick="goSchool()">학교가기</button>
+<button onclick="goHome()">집가기</button>
+</div>
+
+<div class="cards">
+
+<div class="card">
+<div class="bus">15번</div>
+<div id="bus15"></div>
+</div>
+
+<div class="card">
+<div class="bus">15-2번</div>
+<div id="bus152"></div>
+</div>
+
+</div>
+
+<div class="status" id="status">방향 선택</div>
+
+<div class="ray-area">
+<img src="ray.png">
+</div>
+
+</div>
+
+<script>
+
+const API_KEY="c751586736e55cd355fc0a5113bbe9505107acc72625ed77f46e4853f4092173";
+
+const SCHOOL=[
+"228003086",
+"228000945"
+];
+
+const HOME=[
+"228003014",
+"228002037"
+];
+
+let currentStations=null;
+let timer=30;
+
+function updateTimer(){
+
+document.getElementById("timer").innerText=timer;
+
+timer--;
+
+if(timer<0){
+timer=30;
+if(currentStations){
+loadBus(currentStations);
+}
+}
+
+}
+
+setInterval(updateTimer,1000);
+
+function loadBus(stations){
+
+currentStations=stations;
+timer=30;
+
+let busMap={
+"15":[],
+"15-2":[]
+};
+
+let promises=stations.map(station=>{
+
+return fetch(`https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?serviceKey=${API_KEY}&stationId=${station}`)
+.then(res=>res.json())
+.then(data=>{
+
+if(!data.response) return;
+
+let list=data.response.msgBody.busArrivalList;
+
+for(let bus of list){
+
+if(bus.routeName=="15"||bus.routeName=="15-2"){
+
+if(bus.predictTime1){
+busMap[bus.routeName].push({
+time:parseInt(bus.predictTime1),
+stop:bus.locationNo1
+});
+}
+
+if(bus.predictTime2){
+busMap[bus.routeName].push({
+time:parseInt(bus.predictTime2),
+stop:bus.locationNo2
+});
+}
+
+}
+
+}
+
+});
+
+});
+
+Promise.all(promises).then(()=>{
+
+drawBus("15","bus15",busMap);
+drawBus("15-2","bus152",busMap);
+
+document.getElementById("status").innerText="조회 완료";
+
+});
+
+}
+
+function drawBus(name,id,map){
+
+let list=map[name];
+list.sort((a,b)=>a.time-b.time);
+
+let html="";
+
+if(list.length==0){
+
+html+="<div class='line'>도착정보 없음</div>";
+
+}else{
+
+list.slice(0,2).forEach(bus=>{
+
+if(bus.time<=1 || bus.stop<=1){
+
+html+=`
+<div class="line">
+<span class="arrive">곧 도착</span><br>
+<span class="stop">${bus.stop}정류장</span>
+</div>
+`;
+
+}else{
+
+html+=`
+<div class="line">
+<span class="time">${bus.time}분</span><br>
+<span class="stop">${bus.stop}정류장</span>
+</div>
+`;
+
+}
+
+});
+
+}
+
+document.getElementById(id).innerHTML=html;
+
+}
+
+function goSchool(){
+document.getElementById("status").innerText="학교 가는 버스";
+loadBus(SCHOOL);
+}
+
+function goHome(){
+document.getElementById("status").innerText="집 가는 버스";
+loadBus(HOME);
+}
+
+</script>
+
+</body>
+</html>
