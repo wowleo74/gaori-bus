@@ -1,4 +1,5 @@
 {
+  "id": "mole-game"
   "name": "가오리 버스",
   "short_name": "가오리버스",
   "start_url": "/gaori-bus/",
@@ -14,4 +15,5 @@
   ]
 
 }
+
 
