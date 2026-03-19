@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>가오리 버스</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial; background: #F4F6FB; margin: 0; padding: 20px; }
+        .container { max-width: 420px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .title { font-size: 26px; font-weight: bold; }
+        .timer { background: #4F6FD6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 15px; }
+        .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+        button { background: #4F6FD6; border: none; color: white; font-size: 18px; padding: 14px; border-radius: 12px; cursor: pointer; }
+        button:active { opacity: 0.8; }
+        .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .card { background: white; border-radius: 18px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); min-height: 120px; }
+        .bus { background: #FF8A3D; color: white; padding: 8px; border-radius: 8px; font-size: 20px; text-align: center; margin-bottom: 14px; }
+        .line { margin: 12px 0; }
+        .time { font-size: 20px; font-weight: bold; }
+        .stop { font-size: 15px; color: #4F6FD6; }
+        .arrive { color: #E53935; font-weight: bold; font-size: 18px; }
+        .status { text-align: center; margin-top: 18px; font-size: 14px; color: #666; }
+        .ray-area { text-align: center; margin-top: 20px; }
+        .ray-area img { width: 210px; opacity: 0.35; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div class="title">🚌 가오리 버스</div>
+        <div class="timer"><span id="timer">10</span>초</div>
+    </div>
+
+    <div class="buttons">
+        <button onclick="goSchool()">학교가기</button>
+        <button onclick="goHome()">집가기</button>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <div class="bus">15번</div>
+            <div id="bus15"></div>
+        </div>
+        <div class="card">
+            <div class="bus">15-2번</div>
+            <div id="bus152"></div>
+        </div>
+    </div>
+
+    <div class="status" id="status">방향 선택</div>
+    <div class="ray-area"><img src="ray.png"></div>
+</div>
+
+<script>
+    // 본인의 Cloudflare Worker 주소 활용
+    const PROXY_URL = "https://leo-api.leo4240.workers.dev";
+
+    const SCHOOL = ["228003086", "228000945"];
+    const HOME = ["228003014", "228002037"];
+
+    let currentStations = null;
+    let timer = 10;
+
+    function updateTimer() {
+        document.getElementById("timer").innerText = timer;
+        timer--;
+        if (timer < 0) {
+            timer = 10;
+            if (currentStations) loadBus(currentStations);
+        }
+    }
+
+    setInterval(updateTimer, 1000);
+
+    async function loadBus(stations) {
+        currentStations = stations;
+        timer = 10;
+        document.getElementById("status").innerText = "업데이트 중...";
+
+        let busMap = { "15": [], "15-2": [] };
+
+        try {
+            const promises = stations.map(station => 
+                fetch(`${PROXY_URL}/bus?stationId=${station}`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = data?.response?.msgBody?.busArrivalList;
+                    if (!list) return;
+
+                    const busList = Array.isArray(list) ? list : [list];
+
+                    busList.forEach(bus => {
+                        // 노선명 확인 및 전처리 (공백 제거 등)
+                        const name = bus.routeName ? bus.routeName.toString().trim() : "";
+                        
+                        // 15번(또는 015)과 15-2번을 정확히 구분하여 Map에 담기
+                        let targetKey = "";
+                        if (name === "15" || name === "015") targetKey = "15";
+                        else if (name === "15-2") targetKey = "15-2";
+
+                        if (targetKey) {
+                            if (bus.predictTime1) {
+                                busMap[targetKey].push({ time: parseInt(bus.predictTime1), stop: bus.locationNo1 });
+                            }
+                            if (bus.predictTime2) {
+                                busMap[targetKey].push({ time: parseInt(bus.predictTime2), stop: bus.locationNo2 });
+                            }
+                        }
+                    });
+                })
+                .catch(err => console.error("로딩 실패:", err))
+            );
+
+            await Promise.all(promises);
+            drawBus("15", "bus15", busMap);
+            drawBus("15-2", "bus152", busMap);
+            document.getElementById("status").innerText = "조회 완료";
+        } catch (error) {
+            document.getElementById("status").innerText = "연결 오류";
+        }
+    }
+
+    function drawBus(name, id, map) {
+        let list = map[name];
+        list.sort((a, b) => a.time - b.time);
+
+        let html = "";
+        if (list.length === 0) {
+            html = "<div class='line'>도착정보 없음</div>";
+        } else {
+            // 중복 제거 및 상위 2개 표시
+            const uniqueBuses = list.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
+            uniqueBuses.slice(0, 2).forEach(bus => {
+                if (bus.time <= 1 || bus.stop <= 1) {
+                    html += `<div class="line"><span class="arrive">곧 도착</span><br><span class="stop">${bus.stop}정류장 전</span></div>`;
+                } else {
+                    html += `<div class="line"><span class="time">${bus.time}분</span><br><span class="stop">${bus.stop}정류장 전</span></div>`;
+                }
+            });
+        }
+        document.getElementById(id).innerHTML = html;
+    }
+
+    function goSchool() {
+        document.getElementById("status").innerText = "학교 가는 버스 조회";
+        loadBus(SCHOOL);
+    }
+
+    function goHome() {
+        document.getElementById("status").innerText = "집 가는 버스 조회";
+        loadBus(HOME);
+    }
+</script>
+</body>
+</html>
